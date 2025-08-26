@@ -75,13 +75,17 @@ export default function ResultsAnalytics() {
     setDownloadingReports(prev => new Set([...prev, reportId]));
     
     try {
-      if (!attempt) return false;
+      if (!attempt) {
         throw new Error('Invalid test attempt data');
+      }
+      
       const test = getTestById(attempt.testId);
       const user = getUserById(attempt.userId);
       
-      if (!test || !user) return false;
+      if (!test || !user) {
         throw new Error('Test or user data not found');
+      }
+      
       // Validate data before PDF generation
       if (!test.questions || test.questions.length === 0) {
         throw new Error('No questions found for this test');
