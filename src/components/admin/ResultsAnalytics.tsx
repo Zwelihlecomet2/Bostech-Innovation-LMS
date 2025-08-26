@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useApp } from '../../context/AppContext';
-import { BarChart3, Download, Users, Trophy, Clock } from 'lucide-react';
+import { BarChart3, Download, Users, Trophy, Clock, AlertCircle, CheckCircle, Loader } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import bostechLogo from "../../assets/bostech-logo.jpg";
@@ -35,6 +35,9 @@ interface TestAttempt {
 export default function ResultsAnalytics() {
   const { state } = useApp();
   const [selectedTest, setSelectedTest] = useState<string>('all');
+  const [downloadingReports, setDownloadingReports] = useState<Set<string>>(new Set());
+  const [downloadErrors, setDownloadErrors] = useState<Record<string, string>>({});
+  const [downloadSuccess, setDownloadSuccess] = useState<Record<string, boolean>>({});
 
   const filteredAttempts = selectedTest === 'all' 
     ? state.testAttempts 
@@ -61,128 +64,182 @@ export default function ResultsAnalytics() {
     return state.tests.find(test => test.id === testId) as Test | undefined;
   };
 
-  const generatePDFReport = (attempt: TestAttempt) => {
+  const generatePDFReport = async (attempt: TestAttempt) => {
+    const reportId = attempt.id;
+    
+    // Clear previous states
+    setDownloadErrors(prev => ({ ...prev, [reportId]: '' }));
+    setDownloadSuccess(prev => ({ ...prev, [reportId]: false }));
+    
+    // Set loading state
+    setDownloadingReports(prev => new Set([...prev, reportId]));
+    
     try {
       if (!attempt) return false;
-
+        throw new Error('Invalid test attempt data');
       const test = getTestById(attempt.testId);
       const user = getUserById(attempt.userId);
       
       if (!test || !user) return false;
+        throw new Error('Test or user data not found');
+      // Validate data before PDF generation
+      if (!test.questions || test.questions.length === 0) {
+        throw new Error('No questions found for this test');
+      }
+
+      // Add small delay to show loading state
+      await new Promise(resolve => setTimeout(resolve, 500));
 
       // Create PDF document
       const doc = new jsPDF('p', 'mm', 'a4');
       
-      // Add header with styling and logo
-      doc.setFillColor(245, 158, 11); // Amber color
-      doc.rect(0, 0, doc.internal.pageSize.width, 40, 'F');
-      
-      // Add logo
-      doc.addImage(bostechLogo, 'JPEG', 20, 5, 30, 30);
-      
-      // Add company name
-      doc.setTextColor(255, 255, 255);
-      doc.setFontSize(24);
-      doc.text('Bostech Security Training', 60, 25);
-      
-      doc.setFontSize(16);
-      doc.text('Test Result Report', doc.internal.pageSize.width / 2, 35, { align: 'center' });
-      
-      // Reset text color for rest of content
-      doc.setTextColor(0, 0, 0);
-      
-      // Add test and user information with better formatting
-      doc.setFontSize(12);
-      doc.text('Test Details', 20, 50);
-      doc.setDrawColor(245, 158, 11);
-      doc.line(20, 52, 190, 52);
-      
-      doc.setFontSize(10);
-      doc.text(`Test Name: ${test.title}`, 20, 65);
-      doc.text(`Category: ${test.category || 'N/A'}`, 20, 75);
-      doc.text(`User: ${user.username}`, 20, 85);
-      doc.text(`Email: ${user.email}`, 20, 95);
-      doc.text(`Completion Date: ${new Date(attempt.completedAt).toLocaleString()}`, 20, 105);
-      
-      // Add score information with styling
-      doc.setFontSize(12);
-      doc.text('Performance Summary', 20, 120);
-      doc.line(20, 122, 190, 122);
-      
-      doc.setFontSize(10);
-      // Create score box with lighter color
-      doc.setFillColor(255, 250, 240); // Very light amber/orange
-      doc.roundedRect(20, 130, 170, 30, 3, 3, 'F');
-      // Add a subtle border
-      doc.setDrawColor(245, 158, 11);
-      doc.roundedRect(20, 130, 170, 30, 3, 3);
-      doc.text(`Score: ${attempt.percentage.toFixed(1)}%`, 30, 140);
-      doc.text(`Correct Answers: ${attempt.correctAnswers}/${attempt.totalQuestions}`, 30, 150);
-      
-      const mins = Math.floor(attempt.timeSpent / 60);
-      const secs = attempt.timeSpent % 60;
-      doc.text(`Time Spent: ${mins}:${String(secs).padStart(2, '0')}`, 120, 140);
-      
-      // Add answers table with better styling
-      doc.text('Detailed Answers', 20, 175);
-      doc.line(20, 177, 190, 177);
-      
-      // Process questions and answers
-      const tableData = Object.entries(test.questions).map(([questionId, question]) => {
-        // Get the selected answer (A, B, C, or D)
-        const selectedOption = attempt.answers[questionId];
-        const correctOption = question.correctAnswer;
+      try {
+        // Add header with styling and logo
+        doc.setFillColor(245, 158, 11); // Amber color
+        doc.rect(0, 0, doc.internal.pageSize.width, 40, 'F');
         
-        // Get the full text of the selected and correct answers
-        const selectedAnswerText = selectedOption ? question.options[selectedOption] : 'Not Selected';
-        const correctAnswerText = question.options[correctOption];
-        
-        // Compare the selected option with correct option
-        const isCorrect = String(selectedOption) === String(correctOption);
-        
-        return [
-          question.text,
-          selectedAnswerText,
-          correctAnswerText,
-          isCorrect ? 'Correct' : 'Incorrect'
-        ];
-      });
-      
-      autoTable(doc, {
-        startY: 185,
-        head: [['Question', 'Selected Answer', 'Correct Answer', 'Status']],
-        body: tableData,
-        theme: 'grid',
-        headStyles: {
-          fillColor: '#f59e0b',
-          textColor: '#ffffff',
-          fontStyle: 'bold'
-        },
-        columnStyles: {
-          0: { cellWidth: 80 },
-          1: { cellWidth: 40 },
-          2: { cellWidth: 40 },
-          3: { cellWidth: 20 }
-        },
-        styles: {
-          fontSize: 8,
-          cellPadding: 3,
-          overflow: 'linebreak',
-          cellWidth: 'wrap'
-        },
-        alternateRowStyles: {
-          fillColor: '#fff7ed'
+        // Add logo (with error handling)
+        try {
+          doc.addImage(bostechLogo, 'JPEG', 20, 5, 30, 30);
+        } catch (logoError) {
+          console.warn('Logo could not be added to PDF:', logoError);
         }
-      });
+        
+        // Add company name
+        doc.setTextColor(255, 255, 255);
+        doc.setFontSize(24);
+        doc.text('Bostech Security Training', 60, 25);
+        
+        doc.setFontSize(16);
+        doc.text('Test Result Report', doc.internal.pageSize.width / 2, 35, { align: 'center' });
+        
+        // Reset text color for rest of content
+        doc.setTextColor(0, 0, 0);
+        
+        // Add test and user information with better formatting
+        doc.setFontSize(12);
+        doc.text('Test Details', 20, 50);
+        doc.setDrawColor(245, 158, 11);
+        doc.line(20, 52, 190, 52);
+        
+        doc.setFontSize(10);
+        doc.text(`Test Name: ${test.title}`, 20, 65);
+        doc.text(`Category: ${test.category || 'N/A'}`, 20, 75);
+        doc.text(`User: ${user.username}`, 20, 85);
+        doc.text(`Email: ${user.email}`, 20, 95);
+        doc.text(`Completion Date: ${new Date(attempt.completedAt).toLocaleString()}`, 20, 105);
+        
+        // Add score information with styling
+        doc.setFontSize(12);
+        doc.text('Performance Summary', 20, 120);
+        doc.line(20, 122, 190, 122);
+        
+        doc.setFontSize(10);
+        // Create score box with lighter color
+        doc.setFillColor(255, 250, 240); // Very light amber/orange
+        doc.roundedRect(20, 130, 170, 30, 3, 3, 'F');
+        // Add a subtle border
+        doc.setDrawColor(245, 158, 11);
+        doc.roundedRect(20, 130, 170, 30, 3, 3);
+        doc.text(`Score: ${attempt.percentage.toFixed(1)}%`, 30, 140);
+        doc.text(`Correct Answers: ${attempt.correctAnswers}/${attempt.totalQuestions}`, 30, 150);
+        
+        const mins = Math.floor(attempt.timeSpent / 60);
+        const secs = attempt.timeSpent % 60;
+        doc.text(`Time Spent: ${mins}:${String(secs).padStart(2, '0')}`, 120, 140);
+        
+        // Add answers table with better styling
+        doc.text('Detailed Answers', 20, 175);
+        doc.line(20, 177, 190, 177);
+        
+        // Process questions and answers with validation
+        const tableData = test.questions.map((question, index) => {
+          // Get the selected answer (A, B, C, or D)
+          const selectedOption = attempt.answers[question.id];
+          const correctOption = question.correctAnswer;
+          
+          // Get the full text of the selected and correct answers
+          const selectedAnswerText = selectedOption ? question.options[selectedOption] : 'Not Selected';
+          const correctAnswerText = question.options[correctOption];
+          
+          // Compare the selected option with correct option
+          const isCorrect = String(selectedOption) === String(correctOption);
+          
+          return [
+            `Q${index + 1}: ${question.text.substring(0, 100)}${question.text.length > 100 ? '...' : ''}`,
+            selectedAnswerText.substring(0, 50) + (selectedAnswerText.length > 50 ? '...' : ''),
+            correctAnswerText.substring(0, 50) + (correctAnswerText.length > 50 ? '...' : ''),
+            isCorrect ? 'Correct' : 'Incorrect'
+          ];
+        });
+        
+        autoTable(doc, {
+          startY: 185,
+          head: [['Question', 'Selected Answer', 'Correct Answer', 'Status']],
+          body: tableData,
+          theme: 'grid',
+          headStyles: {
+            fillColor: '#f59e0b',
+            textColor: '#ffffff',
+            fontStyle: 'bold'
+          },
+          columnStyles: {
+            0: { cellWidth: 80 },
+            1: { cellWidth: 40 },
+            2: { cellWidth: 40 },
+            3: { cellWidth: 20 }
+          },
+          styles: {
+            fontSize: 8,
+            cellPadding: 3,
+            overflow: 'linebreak',
+            cellWidth: 'wrap'
+          },
+          alternateRowStyles: {
+            fillColor: '#fff7ed'
+          }
+        });
+      } catch (pdfError) {
+        throw new Error(`PDF generation failed: ${pdfError.message}`);
+      }
+      
+      // Generate filename with timestamp
+      const timestamp = new Date().toISOString().split('T')[0];
+      const sanitizedTestTitle = test.title.replace(/[^a-zA-Z0-9]/g, '_');
+      const sanitizedUsername = user.username.replace(/[^a-zA-Z0-9]/g, '_');
+      const filename = `${sanitizedTestTitle}_${sanitizedUsername}_Report_${timestamp}.pdf`;
       
       // Save the PDF
-      doc.save(`${test.title}-${user.username}-Report.pdf`);
-      return true;
+      doc.save(filename);
+      
+      // Show success message
+      setDownloadSuccess(prev => ({ ...prev, [reportId]: true }));
+      setTimeout(() => {
+        setDownloadSuccess(prev => ({ ...prev, [reportId]: false }));
+      }, 3000);
+      
     } catch (error) {
-      console.error('Error generating PDF:', error);
-      return false;
+      console.error('Error generating PDF report:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to generate PDF report';
+      setDownloadErrors(prev => ({ ...prev, [reportId]: errorMessage }));
+      
+      // Clear error after 5 seconds
+      setTimeout(() => {
+        setDownloadErrors(prev => ({ ...prev, [reportId]: '' }));
+      }, 5000);
+    } finally {
+      // Remove loading state
+      setDownloadingReports(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(reportId);
+        return newSet;
+      });
     }
   };
+
+  const isDownloading = (attemptId: string) => downloadingReports.has(attemptId);
+  const hasError = (attemptId: string) => !!downloadErrors[attemptId];
+  const hasSuccess = (attemptId: string) => !!downloadSuccess[attemptId];
 
   return (
     <div className="space-y-6">
@@ -331,11 +388,42 @@ export default function ResultsAnalytics() {
                         <td className="px-6 py-4 whitespace-nowrap">
                           <button
                             onClick={() => generatePDFReport(attempt)}
-                            className="flex items-center space-x-1 text-amber-600 hover:text-amber-800 transition-colors disabled:opacity-50"
+                            disabled={isDownloading(attempt.id)}
+                            className={`flex items-center space-x-1 transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                              hasError(attempt.id) 
+                                ? 'text-red-600 hover:text-red-800' 
+                                : hasSuccess(attempt.id)
+                                ? 'text-green-600 hover:text-green-800'
+                                : 'text-amber-600 hover:text-amber-800'
+                            }`}
                           >
-                            <Download className="w-4 h-4" />
-                            <span>Download</span>
+                            {isDownloading(attempt.id) ? (
+                              <>
+                                <Loader className="w-4 h-4 animate-spin" />
+                                <span>Generating...</span>
+                              </>
+                            ) : hasError(attempt.id) ? (
+                              <>
+                                <AlertCircle className="w-4 h-4" />
+                                <span>Retry</span>
+                              </>
+                            ) : hasSuccess(attempt.id) ? (
+                              <>
+                                <CheckCircle className="w-4 h-4" />
+                                <span>Downloaded</span>
+                              </>
+                            ) : (
+                              <>
+                                <Download className="w-4 h-4" />
+                                <span>Download</span>
+                              </>
+                            )}
                           </button>
+                          {hasError(attempt.id) && (
+                            <div className="text-xs text-red-600 mt-1 max-w-32 truncate" title={downloadErrors[attempt.id]}>
+                              {downloadErrors[attempt.id]}
+                            </div>
+                          )}
                         </td>
                       </tr>
                     );
