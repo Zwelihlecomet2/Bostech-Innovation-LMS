@@ -102,17 +102,21 @@ export default function ResultsAnalytics() {
         doc.setFillColor(245, 158, 11); // Amber color
         doc.rect(0, 0, doc.internal.pageSize.width, 40, 'F');
         
-        // Add logo (with error handling)
+        // Add Bostech logo (with error handling)
         try {
           doc.addImage(bostechLogo, 'JPEG', 20, 5, 30, 30);
         } catch (logoError) {
-          console.warn('Logo could not be added to PDF:', logoError);
+          console.warn('Bostech logo could not be added to PDF:', logoError);
+          // Fallback: Add a simple text logo if image fails
+          doc.setTextColor(255, 255, 255);
+          doc.setFontSize(12);
+          doc.text('BOSTECH', 20, 25);
         }
         
         // Add company name
         doc.setTextColor(255, 255, 255);
         doc.setFontSize(24);
-        doc.text('Bostech Security Training', 60, 25);
+        doc.text('Bostech Training', 60, 25);
         
         doc.setFontSize(16);
         doc.text('Test Result Report', doc.internal.pageSize.width / 2, 35, { align: 'center' });
