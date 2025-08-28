@@ -121,7 +121,7 @@ export default function TestResults({ onBack }: TestResultsProps) {
     if (percentage >= 90) return 'Pass - Excellent';
     if (percentage >= 75) return 'Pass - Very Good';
     if (percentage >= 60) return 'Pass - Good';
-    if (percentage >= 50) return 'Satisfactory';
+    if (percentage >= 50) return 'Pass - Satisfactory';
     return 'Fail - Needs Improvement';
   };
 
