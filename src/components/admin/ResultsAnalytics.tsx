@@ -102,14 +102,30 @@ export default function ResultsAnalytics() {
         doc.setFillColor(245, 158, 11); // Amber color
         doc.rect(0, 0, doc.internal.pageSize.width, 40, 'F');
         
-        // Add Bostech logo (with error handling)
+        // Add Bostech logo as base64 data URL
         try {
+          // Convert image to base64 and add to PDF
+          const img = new Image();
+          img.crossOrigin = 'anonymous';
+          img.onload = function() {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            canvas.width = img.width;
+            canvas.height = img.height;
+            ctx?.drawImage(img, 0, 0);
+            const dataURL = canvas.toDataURL('image/jpeg', 0.8);
+            doc.addImage(dataURL, 'JPEG', 20, 5, 30, 30);
+          };
+          img.src = bostechLogo;
+          
+          // For immediate PDF generation, use a simpler approach
           doc.addImage(bostechLogo, 'JPEG', 20, 5, 30, 30);
         } catch (logoError) {
           console.warn('Bostech logo could not be added to PDF:', logoError);
           // Fallback: Add a simple text logo if image fails
           doc.setTextColor(255, 255, 255);
-          doc.setFontSize(12);
+          doc.setFontSize(16);
+          doc.setFont('helvetica', 'bold');
           doc.text('BOSTECH', 20, 25);
         }
         
