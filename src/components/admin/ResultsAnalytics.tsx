@@ -102,31 +102,32 @@ export default function ResultsAnalytics() {
         doc.setFillColor(245, 158, 11); // Amber color
         doc.rect(0, 0, doc.internal.pageSize.width, 40, 'F');
         
-        // Add Bostech logo as base64 data URL
-        try {
-          // Convert image to base64 and add to PDF
+        // Add Bostech logo - convert to base64 first
+        const logoBase64 = await new Promise<string>((resolve, reject) => {
           const img = new Image();
           img.crossOrigin = 'anonymous';
-          img.onload = function() {
+          img.onload = () => {
             const canvas = document.createElement('canvas');
             const ctx = canvas.getContext('2d');
-            canvas.width = img.width;
-            canvas.height = img.height;
-            ctx?.drawImage(img, 0, 0);
-            const dataURL = canvas.toDataURL('image/jpeg', 0.8);
-            doc.addImage(dataURL, 'JPEG', 20, 5, 30, 30);
+            if (!ctx) {
+              reject(new Error('Canvas context not available'));
+              return;
+            }
+            canvas.width = img.naturalWidth;
+            canvas.height = img.naturalHeight;
+            ctx.drawImage(img, 0, 0);
+            resolve(canvas.toDataURL('image/jpeg', 0.9));
           };
+          img.onerror = () => reject(new Error('Image failed to load'));
           img.src = bostechLogo;
-          
-          // For immediate PDF generation, use a simpler approach
-          doc.addImage(bostechLogo, 'JPEG', 20, 5, 30, 30);
-        } catch (logoError) {
-          console.warn('Bostech logo could not be added to PDF:', logoError);
-          // Fallback: Add a simple text logo if image fails
-          doc.setTextColor(255, 255, 255);
-          doc.setFontSize(16);
-          doc.setFont('helvetica', 'bold');
-          doc.text('BOSTECH', 20, 25);
+        }).catch(() => null);
+        
+        if (logoBase64) {
+          try {
+            doc.addImage(logoBase64, 'JPEG', 20, 5, 30, 30);
+          } catch (logoError) {
+            console.warn('Failed to add logo to PDF:', logoError);
+          }
         }
         
         // Add company name
