@@ -388,7 +388,11 @@ export default function ResultsAnalytics() {
                               attempt.percentage >= 80 ? 'text-green-600' :
                               attempt.percentage >= 60 ? 'text-amber-600' : 'text-red-600'
                             }`}>
-                              {attempt.percentage.toFixed(1)}%
+                              {
+                              attempt.percentage >= 50 ? 'Passed' :
+                              attempt.percentage < 50 ? 'Failed' : 'Not Attempted'
+                              }
+                              <div></div>{attempt.percentage.toFixed(1)}%
                             </div>
                             <div className="text-xs text-gray-500 ml-2">
                               ({attempt.correctAnswers}/{attempt.totalQuestions})
