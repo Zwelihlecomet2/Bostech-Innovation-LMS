@@ -10,7 +10,7 @@ interface UserFormProps {
 }
 
 export default function UserForm({ user, onClose, onSave }: UserFormProps) {
-  const { dispatch } = useApp();
+  const { dispatch, refreshData } = useApp();
   const [formData, setFormData] = useState({
     username: '',
     email: '',
@@ -18,6 +18,8 @@ export default function UserForm({ user, onClose, onSave }: UserFormProps) {
     isActive: true
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [loading, setLoading] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   useEffect(() => {
     if (user) {
@@ -61,29 +63,37 @@ export default function UserForm({ user, onClose, onSave }: UserFormProps) {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!validateForm()) return;
 
-    const userData: User = {
-      id: user?.id || `user-${Date.now()}`,
+    setLoading(true);
+    setSubmitError(null);
+
+    const userData = {
       username: formData.username.trim(),
       email: formData.email.trim(),
-      password: formData.password,
-      role: 'user',
-      isActive: formData.isActive,
-      createdAt: user?.createdAt || new Date().toISOString(),
-      lastLogin: user?.lastLogin
+      ...(formData.password && { password: formData.password }),
+      isActive: formData.isActive
     };
 
-    if (user) {
-      dispatch({ type: 'UPDATE_USER', payload: userData });
-    } else {
-      dispatch({ type: 'ADD_USER', payload: userData });
+    try {
+      if (user) {
+        const result = await apiService.updateUser(user.id, userData);
+        dispatch({ type: 'UPDATE_USER', payload: result.user });
+      } else {
+        const result = await apiService.createUser({ ...userData, password: formData.password });
+        dispatch({ type: 'ADD_USER', payload: result.user });
+      }
+      
+      await refreshData();
+      onSave();
+    } catch (error) {
+      setSubmitError(error instanceof Error ? error.message : 'Failed to save user');
+    } finally {
+      setLoading(false);
     }
-
-    onSave();
   };
 
   const handleChange = (field: string, value: string | boolean) => {
@@ -109,6 +119,12 @@ export default function UserForm({ user, onClose, onSave }: UserFormProps) {
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          {submitError && (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+              <p className="text-red-800 text-sm">{submitError}</p>
+            </div>
+          )}
+          
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Username
@@ -180,15 +196,17 @@ export default function UserForm({ user, onClose, onSave }: UserFormProps) {
             <button
               type="button"
               onClick={onClose}
+              disabled={loading}
               className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium transition-colors"
             >
               Cancel
             </button>
             <button
               type="submit"
+              disabled={loading}
               className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors"
             >
-              {user ? 'Update User' : 'Create User'}
+              {loading ? 'Saving...' : (user ? 'Update User' : 'Create User')}
             </button>
           </div>
         </form>

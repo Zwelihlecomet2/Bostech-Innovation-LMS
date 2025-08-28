@@ -5,10 +5,12 @@ import { Plus, Edit2, Trash2, Eye, EyeOff, Search } from 'lucide-react';
 import UserForm from './UserForm';
 
 export default function UserManagement() {
-  const { state, dispatch } = useApp();
+  const { state, dispatch, refreshData } = useApp();
   const [showUserForm, setShowUserForm] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const users = state.users.filter(u => u.role === 'user');
   const filteredUsers = users.filter(user =>
@@ -16,17 +18,34 @@ export default function UserManagement() {
     user.email.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const handleDeleteUser = (userId: string) => {
+  const handleDeleteUser = async (userId: string) => {
     if (window.confirm('Are you sure you want to delete this user?')) {
-      dispatch({ type: 'DELETE_USER', payload: userId });
+      setLoading(true);
+      setError(null);
+      try {
+        await apiService.deleteUser(userId);
+        dispatch({ type: 'DELETE_USER', payload: userId });
+        await refreshData();
+      } catch (error) {
+        setError(error instanceof Error ? error.message : 'Failed to delete user');
+      } finally {
+        setLoading(false);
+      }
     }
   };
 
-  const toggleUserStatus = (user: User) => {
-    dispatch({
-      type: 'UPDATE_USER',
-      payload: { ...user, isActive: !user.isActive }
-    });
+  const toggleUserStatus = async (user: User) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await apiService.toggleUserStatus(user.id);
+      dispatch({ type: 'UPDATE_USER', payload: result.user });
+      await refreshData();
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Failed to update user status');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleEditUser = (user: User) => {
@@ -39,8 +58,19 @@ export default function UserManagement() {
     setEditingUser(null);
   };
 
+  const handleUserSaved = async () => {
+    await refreshData();
+    closeForm();
+  };
+
   return (
     <div className="space-y-6">
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+          <p className="text-red-800">{error}</p>
+        </div>
+      )}
+      
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-4 sm:space-y-0">
         <div>
@@ -140,7 +170,8 @@ export default function UserManagement() {
                       <div className="flex items-center justify-end space-x-2">
                         <button
                           onClick={() => toggleUserStatus(user)}
-                          className={`p-1 rounded hover:bg-gray-100 ${
+                          disabled={loading}
+                          className={`p-1 rounded hover:bg-gray-100 disabled:opacity-50 ${
                             user.isActive ? 'text-red-600' : 'text-green-600'
                           }`}
                           title={user.isActive ? 'Deactivate user' : 'Activate user'}
@@ -149,6 +180,7 @@ export default function UserManagement() {
                         </button>
                         <button
                           onClick={() => handleEditUser(user)}
+                          disabled={loading}
                           className="p-1 rounded hover:bg-gray-100 text-blue-600"
                           title="Edit user"
                         >
@@ -156,6 +188,7 @@ export default function UserManagement() {
                         </button>
                         <button
                           onClick={() => handleDeleteUser(user.id)}
+                          disabled={loading}
                           className="p-1 rounded hover:bg-gray-100 text-red-600"
                           title="Delete user"
                         >
@@ -176,7 +209,7 @@ export default function UserManagement() {
         <UserForm
           user={editingUser}
           onClose={closeForm}
-          onSave={closeForm}
+          onSave={handleUserSaved}
         />
       )}
     </div>
