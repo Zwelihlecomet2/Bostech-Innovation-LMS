@@ -70,73 +70,75 @@ export default function TakeTest({ test, onComplete, onBack }: TakeTestProps) {
     }
     
     try {
-    setSubmitError(null);
-    
-    // Prepare submission data
-    const submissionData = {
-      testId: test.id,
-      answers,
-      timeSpent: Math.floor((endTime - startTime) / 1000),
-      submissionType
-    };
-    
-    // Submit to backend
-    const result = await apiService.submitTestAttempt(submissionData);
-    
-    // Add to local state for immediate UI update
-    dispatch({ type: 'ADD_TEST_ATTEMPT', payload: result.attempt });
-    
-    // Refresh data to ensure consistency
-    await refreshData();
-    
-    onComplete();
-  } catch (error) {
-    console.error('Error submitting test:', error);
-    setSubmitError(error instanceof Error ? error.message : 'Failed to submit test');
-    setIsSubmitting(false);
-    if (submissionType === 'auto') {
-      setHasAutoSubmitted(false);
-    }
-    
-    // For auto-submission errors, we should still complete to prevent user from being stuck
-    if (submissionType === 'auto') {
-      // Fallback to local storage submission
-      try {
-    const endTime = Date.now();
-    const timeSpent = Math.floor((endTime - startTime) / 1000);
-    
-    let correctAnswers = 0;
-    test.questions.forEach((question) => {
-      if (answers[question.id] === question.correctAnswer) {
-        correctAnswers++;
+      setSubmitError(null);
+      
+      const endTime = Date.now();
+      
+      // Prepare submission data
+      const submissionData = {
+        testId: test.id,
+        answers,
+        timeSpent: Math.floor((endTime - startTime) / 1000),
+        submissionType
+      };
+      
+      // Submit to backend
+      const result = await apiService.submitTestAttempt(submissionData);
+      
+      // Add to local state for immediate UI update
+      dispatch({ type: 'ADD_TEST_ATTEMPT', payload: result.attempt });
+      
+      // Refresh data to ensure consistency
+      await refreshData();
+      
+      onComplete();
+    } catch (error) {
+      console.error('Error submitting test:', error);
+      setSubmitError(error instanceof Error ? error.message : 'Failed to submit test');
+      setIsSubmitting(false);
+      if (submissionType === 'auto') {
+        setHasAutoSubmitted(false);
       }
-    });
+      
+      // For auto-submission errors, we should still complete to prevent user from being stuck
+      if (submissionType === 'auto') {
+        // Fallback to local storage submission
+        try {
+          const endTime = Date.now();
+          const timeSpent = Math.floor((endTime - startTime) / 1000);
+          
+          let correctAnswers = 0;
+          test.questions.forEach((question) => {
+            if (answers[question.id] === question.correctAnswer) {
+              correctAnswers++;
+            }
+          });
 
-    const totalQuestions = test.questions.length;
-    const percentage = totalQuestions > 0 ? (correctAnswers / totalQuestions) * 100 : 0;
+          const totalQuestions = test.questions.length;
+          const percentage = totalQuestions > 0 ? (correctAnswers / totalQuestions) * 100 : 0;
 
-    const testAttempt: TestAttempt = {
-      id: `attempt-${Date.now()}`,
-      userId: state.currentUser!.id,
-      testId: test.id,
-      answers,
-      score: correctAnswers,
-      totalQuestions,
-      correctAnswers,
-      percentage,
-      timeSpent,
-      completedAt: new Date().toISOString(),
-      submissionType
-    };
+          const testAttempt: TestAttempt = {
+            id: `attempt-${Date.now()}`,
+            userId: state.currentUser!.id,
+            testId: test.id,
+            answers,
+            score: correctAnswers,
+            totalQuestions,
+            correctAnswers,
+            percentage,
+            timeSpent,
+            completedAt: new Date().toISOString(),
+            submissionType
+          };
 
-    dispatch({ type: 'ADD_TEST_ATTEMPT', payload: testAttempt });
-    onComplete();
-      } catch (fallbackError) {
-        console.error('Fallback submission also failed:', fallbackError);
-        onComplete();
+          dispatch({ type: 'ADD_TEST_ATTEMPT', payload: testAttempt });
+          onComplete();
+        } catch (fallbackError) {
+          console.error('Fallback submission also failed:', fallbackError);
+          onComplete();
+        }
       }
     }
-  }
   }, [answers, test, state.currentUser, startTime, dispatch, onComplete, isSubmitting, hasAutoSubmitted]);
 
   // Timer effect
