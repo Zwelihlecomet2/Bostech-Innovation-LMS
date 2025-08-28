@@ -7,7 +7,7 @@ import AdminDashboard from './components/admin/AdminDashboard';
 import UserDashboard from './components/user/UserDashboard';
 
 function AppContent() {
-  const { state, loading, error } = useApp();
+  const { state, loading, error, backendMode } = useApp();
   const [showLanding, setShowLanding] = React.useState(true);
 
   if (loading) {
@@ -15,7 +15,9 @@ function AppContent() {
       <div className="min-h-screen bg-gradient-to-br from-amber-50 via-orange-50 to-yellow-100 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-amber-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading...</p>
+          <p className="text-gray-600">
+            {backendMode ? 'Connecting to server...' : 'Loading application...'}
+          </p>
         </div>
       </div>
     );

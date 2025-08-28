@@ -8,6 +8,30 @@ interface ApiResponse<T = any> {
 }
 
 class ApiService {
+  private isBackendAvailable: boolean | null = null;
+
+  async checkBackendHealth(): Promise<boolean> {
+    try {
+      const response = await fetch(`${API_BASE_URL.replace('/api', '')}/health`, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      this.isBackendAvailable = response.ok;
+      return response.ok;
+    } catch (error) {
+      console.warn('Backend not available, using localStorage mode');
+      this.isBackendAvailable = false;
+      return false;
+    }
+  }
+
+  async isBackendReady(): Promise<boolean> {
+    if (this.isBackendAvailable === null) {
+      return await this.checkBackendHealth();
+    }
+    return this.isBackendAvailable;
+  }
+
   private getAuthHeaders(): Record<string, string> {
     const token = localStorage.getItem('accessToken');
     return {

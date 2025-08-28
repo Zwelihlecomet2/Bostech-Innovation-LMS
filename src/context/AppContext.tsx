@@ -13,13 +13,15 @@ type AppAction =
   | { type: 'ADD_TEST_ATTEMPT'; payload: TestAttempt }
   | { type: 'LOAD_STATE'; payload: AppState }
   | { type: 'SET_LOADING'; payload: boolean }
-  | { type: 'SET_ERROR'; payload: string | null };
+  | { type: 'SET_ERROR'; payload: string | null }
+  | { type: 'SET_BACKEND_MODE'; payload: boolean };
 
 interface AppContextType {
   state: AppState;
   dispatch: React.Dispatch<AppAction>;
   loading: boolean;
   error: string | null;
+  backendMode: boolean;
   login: (username: string, password: string) => Promise<User | null>;
   logout: () => void;
   loadInitialData: () => Promise<void>;
@@ -37,6 +39,7 @@ const initialState: AppState = {
 
 const initialLoading = false;
 const initialError = null;
+const initialBackendMode = false;
 
 function appReducer(state: AppState, action: AppAction): AppState {
   switch (action.type) {
@@ -97,10 +100,19 @@ function errorReducer(state: string | null, action: AppAction): string | null {
   }
 }
 
+function backendModeReducer(state: boolean, action: AppAction): boolean {
+  switch (action.type) {
+    case 'SET_BACKEND_MODE':
+      return action.payload;
+    default:
+      return state;
+  }
+}
 export function AppProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(appReducer, initialState);
   const [loading, dispatchLoading] = useReducer(loadingReducer, initialLoading);
   const [error, dispatchError] = useReducer(errorReducer, initialError);
+  const [backendMode, dispatchBackendMode] = useReducer(backendModeReducer, initialBackendMode);
 
   const setLoading = (loading: boolean) => {
     dispatchLoading({ type: 'SET_LOADING', payload: loading });
@@ -110,15 +122,50 @@ export function AppProvider({ children }: { children: ReactNode }) {
     dispatchError({ type: 'SET_ERROR', payload: error });
   };
 
+  const setBackendMode = (mode: boolean) => {
+    dispatchBackendMode({ type: 'SET_BACKEND_MODE', payload: mode });
+  };
   useEffect(() => {
-    // Check if user is logged in on app start
-    const token = localStorage.getItem('accessToken');
-    if (token) {
-      loadInitialData();
-    }
+    // Check backend availability and initialize
+    const initializeApp = async () => {
+      const isBackendReady = await apiService.isBackendReady();
+      setBackendMode(isBackendReady);
+      
+      if (isBackendReady) {
+        const token = localStorage.getItem('accessToken');
+        if (token) {
+          await loadInitialData();
+        }
+      } else {
+        // Load from localStorage for demo mode
+        loadFromLocalStorage();
+      }
+    };
+    
+    initializeApp();
   }, []);
 
+  const loadFromLocalStorage = () => {
+    const savedState = localStorage.getItem('quizAppState');
+    if (savedState) {
+      try {
+        const parsedState = JSON.parse(savedState);
+        dispatch({ type: 'LOAD_STATE', payload: parsedState });
+      } catch (error) {
+        console.error('Error loading saved state:', error);
+        createDefaultAdmin();
+      }
+    } else {
+      createDefaultAdmin();
+    }
+  };
+
   const loadInitialData = async () => {
+    if (!backendMode) {
+      loadFromLocalStorage();
+      return;
+    }
+
     setLoading(true);
     setError(null);
     
@@ -158,18 +205,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
       // If token is invalid, clear it
       localStorage.removeItem('accessToken');
       localStorage.removeItem('refreshToken');
+      // Fall back to localStorage mode
+      setBackendMode(false);
+      loadFromLocalStorage();
     } finally {
       setLoading(false);
     }
   };
 
   const refreshData = async () => {
-    if (state.currentUser) {
+    if (state.currentUser && backendMode) {
       await loadInitialData();
     }
   };
 
   const login = async (username: string, password: string): Promise<User | null> => {
+    if (!backendMode) {
+      return await legacyLogin(username, password);
+    }
+
     setLoading(true);
     setError(null);
     
@@ -190,7 +244,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     } catch (error) {
       console.error('Login failed:', error);
       setError(error instanceof Error ? error.message : 'Login failed');
-      return null;
+      // Try localStorage fallback
+      console.log('Trying localStorage fallback...');
+      return await legacyLogin(username, password);
     } finally {
       setLoading(false);
     }
@@ -199,10 +255,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const logout = async () => {
     setLoading(true);
     
-    try {
-      await apiService.logout();
-    } catch (error) {
-      console.error('Logout error:', error);
+    if (backendMode) {
+      try {
+        await apiService.logout();
+      } catch (error) {
+        console.error('Logout error:', error);
+      }
     }
     
     // Clear state
@@ -212,28 +270,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setLoading(false);
   };
 
-  // Legacy localStorage fallback (for development/demo)
-  useEffect(() => {
-    // Only use localStorage if no backend connection
-    if (!state.currentUser && !localStorage.getItem('accessToken')) {
-      const savedState = localStorage.getItem('quizAppState');
-      if (savedState) {
-        try {
-          const parsedState = JSON.parse(savedState);
-          dispatch({ type: 'LOAD_STATE', payload: parsedState });
-        } catch (error) {
-          console.error('Error loading saved state:', error);
-        }
-      } else {
-        // Create default admin for localStorage mode
-        createDefaultAdmin();
-      }
-    }
-  }, []);
 
   // Save to localStorage (fallback for demo mode)
   useEffect(() => {
-    if (!localStorage.getItem('accessToken')) {
+    if (!backendMode) {
       localStorage.setItem('quizAppState', JSON.stringify(state));
     }
   }, [state]);
@@ -292,28 +332,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  // Use backend login if token exists, otherwise use legacy
-  const handleLogin = async (username: string, password: string): Promise<User | null> => {
-    // Try backend login first
-    if (!localStorage.getItem('quizAppState') || localStorage.getItem('accessToken')) {
-      try {
-        return await login(username, password);
-      } catch (error) {
-        console.error('Backend login failed, falling back to localStorage:', error);
-      }
-    }
-    
-    // Fallback to localStorage login
-    return await legacyLogin(username, password);
-  };
 
-  const handleLogout = () => {
-    if (localStorage.getItem('accessToken')) {
-      logout();
-    } else {
-      dispatch({ type: 'SET_CURRENT_USER', payload: null });
-    }
-  };
 
   return (
     <AppContext.Provider value={{ 
@@ -321,8 +340,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       dispatch, 
       loading, 
       error, 
-      login: handleLogin, 
-      logout: handleLogout, 
+      backendMode,
+      login, 
+      logout, 
       loadInitialData, 
       refreshData 
     }}>

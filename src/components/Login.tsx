@@ -13,7 +13,7 @@ export default function Login({ onBackToLanding }: LoginProps) {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   
-  const { login, state } = useApp();
+  const { login, backendMode } = useApp();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -23,7 +23,11 @@ export default function Login({ onBackToLanding }: LoginProps) {
     try {
       const loggedInUser = await login(username, password);
       if (!loggedInUser) {
-        setError('Invalid credentials. Please check your username and password.');
+        if (backendMode) {
+          setError('Invalid credentials. Please check your username and password.');
+        } else {
+          setError('Invalid credentials. Demo mode - try: admin / admin123');
+        }
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Login failed. Please try again.';
@@ -59,7 +63,14 @@ export default function Login({ onBackToLanding }: LoginProps) {
             <h1 className="text-2xl font-bold text-gray-900 mb-2">
               Bostech Training
             </h1>
-            <p className="text-gray-600">Secure Online Examination System</p>
+            <p className="text-gray-600">
+              Secure Online Examination System
+              {!backendMode && (
+                <span className="block text-sm text-amber-600 mt-1">
+                  Demo Mode - No Backend Connected
+                </span>
+              )}
+            </p>
         </div>
 
         {/* Login Form */}
@@ -81,7 +92,7 @@ export default function Login({ onBackToLanding }: LoginProps) {
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 className="w-full px-4 py-3 border border-amber-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-colors"
-                placeholder="Enter your username or email"
+                placeholder={backendMode ? "Enter your username or email" : "Try: admin"}
                 required
               />
             </div>
@@ -96,7 +107,7 @@ export default function Login({ onBackToLanding }: LoginProps) {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="w-full px-4 py-3 border border-amber-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-colors"
-                placeholder="Enter your password"
+                placeholder={backendMode ? "Enter your password" : "Try: admin123"}
                 required
               />
             </div>
@@ -111,10 +122,21 @@ export default function Login({ onBackToLanding }: LoginProps) {
           </form>
 
           <div className="mt-8 pt-6 border-t border-amber-200">
-            <p className="text-xs text-gray-500 text-center">
-              Users can only be registered by administrators.<br />
-              Contact your administrator for access credentials.
-            </p>
+            {backendMode ? (
+              <p className="text-xs text-gray-500 text-center">
+                Connected to backend server.<br />
+                Contact your administrator for access credentials.
+              </p>
+            ) : (
+              <div className="text-xs text-gray-500 text-center">
+                <p className="mb-2">
+                  <strong>Demo Mode:</strong> Backend not connected
+                </p>
+                <p>
+                  Default credentials: <strong>admin</strong> / <strong>admin123</strong>
+                </p>
+              </div>
+            )}
           </div>
         </div>
       </div>
