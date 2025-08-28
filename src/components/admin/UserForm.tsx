@@ -53,7 +53,7 @@ export default function UserForm({ user, onClose, onSave }: UserFormProps) {
       newErrors.password = 'Password must contain at least one uppercase letter';
     } else if (!/(?=.*\d)/.test(formData.password)) {
       newErrors.password = 'Password must contain at least one number';
-    } else if (!/(?=.*[!@#$%^&*()_+\-=\[\{}|;':",./<>?])/.test(formData.password){
+    } else if (!/(?=.*[!@#$%^&*()_+\-=\[\{}|;':",./<>?])/.test(formData.password)) {
       newErrors.password = 'Password must contain at least one special character';
     }
 
