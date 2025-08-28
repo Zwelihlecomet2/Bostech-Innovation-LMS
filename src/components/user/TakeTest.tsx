@@ -238,6 +238,7 @@ export default function TakeTest({ test, onComplete, onBack }: TakeTestProps) {
           {Object.entries(currentQuestion.options).map(([option, text]) => (
             <button
               key={option}
+              disabled={isSubmitting}
               onClick={() => handleAnswerSelect(option as 'A' | 'B' | 'C' | 'D')}
               className={`w-full p-4 text-left border-2 rounded-lg transition-all hover:border-amber-300 ${
                 answers[currentQuestion.id] === option
