@@ -8,28 +8,27 @@ interface ApiResponse<T = any> {
 }
 
 class ApiService {
-  private isBackendAvailable: boolean | null = null;
+  private backendAvailable: boolean = false;
 
   async checkBackendHealth(): Promise<boolean> {
     try {
       const response = await fetch(`${API_BASE_URL.replace('/api', '')}/health`, {
         method: 'GET',
-        headers: { 'Content-Type': 'application/json' }
+        headers: { 'Content-Type': 'application/json' },
+        signal: AbortSignal.timeout(3000) // 3 second timeout
       });
-      this.isBackendAvailable = response.ok;
+      this.backendAvailable = response.ok;
+      console.log('Backend health check:', response.ok ? 'SUCCESS' : 'FAILED');
       return response.ok;
     } catch (error) {
-      console.warn('Backend not available, using localStorage mode');
-      this.isBackendAvailable = false;
+      console.log('Backend not available:', error.message);
+      this.backendAvailable = false;
       return false;
     }
   }
 
-  async isBackendReady(): Promise<boolean> {
-    if (this.isBackendAvailable === null) {
-      return await this.checkBackendHealth();
-    }
-    return this.isBackendAvailable;
+  isBackendAvailable(): boolean {
+    return this.backendAvailable;
   }
 
   private getAuthHeaders(): Record<string, string> {
@@ -50,10 +49,8 @@ class ApiService {
         if (!refreshed) {
           localStorage.removeItem('accessToken');
           localStorage.removeItem('refreshToken');
-          window.location.href = '/';
           throw new Error('Session expired');
         }
-        // Retry the original request would go here
       }
       throw new Error(data.message || 'Request failed');
     }

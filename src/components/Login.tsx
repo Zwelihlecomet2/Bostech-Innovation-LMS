@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { Shield, AlertCircle, ArrowLeft } from 'lucide-react';
+import { Shield, AlertCircle, ArrowLeft, Wifi, WifiOff } from 'lucide-react';
 import bostechLogo from "../assets/bostech-logo.jpg"
 
 interface LoginProps {
@@ -10,28 +10,21 @@ interface LoginProps {
 export default function Login({ onBackToLanding }: LoginProps) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   
-  const { login, backendMode } = useApp();
+  const { login, backendMode, error } = useApp();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
     setLoading(true);
 
     try {
       const loggedInUser = await login(username, password);
       if (!loggedInUser) {
-        if (backendMode) {
-          setError('Invalid credentials. Please check your username and password.');
-        } else {
-          setError('Invalid credentials. Demo mode - try: admin / admin123');
-        }
+        // Error is handled in context
       }
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Login failed. Please try again.';
-      setError(errorMessage);
+      console.error('Login error:', err);
     } finally {
       setLoading(false);
     }
@@ -54,26 +47,40 @@ export default function Login({ onBackToLanding }: LoginProps) {
           {/* Header */}
           <div className="text-center mb-8">
             <div className="flex justify-center mb-4">
-                <img
+              <img
                 src={bostechLogo}
                 alt="Bostech Logo"
                 className="w-16 h-16 rounded-2xl object-cover"
-                />
+              />
             </div>
             <h1 className="text-2xl font-bold text-gray-900 mb-2">
               Bostech Training
             </h1>
             <p className="text-gray-600">
               Secure Online Examination System
-              {!backendMode && (
-                <span className="block text-sm text-amber-600 mt-1">
-                  Demo Mode - No Backend Connected
-                </span>
-              )}
             </p>
-        </div>
+            
+            {/* Connection Status */}
+            <div className={`flex items-center justify-center space-x-2 mt-3 px-3 py-1 rounded-full text-sm ${
+              backendMode 
+                ? 'bg-green-100 text-green-800' 
+                : 'bg-amber-100 text-amber-800'
+            }`}>
+              {backendMode ? (
+                <>
+                  <Wifi className="w-4 h-4" />
+                  <span>Connected to Server</span>
+                </>
+              ) : (
+                <>
+                  <WifiOff className="w-4 h-4" />
+                  <span>Demo Mode</span>
+                </>
+              )}
+            </div>
+          </div>
 
-        {/* Login Form */}
+          {/* Login Form */}
           <form onSubmit={handleSubmit} className="space-y-6">
             {error && (
               <div className="flex items-center space-x-2 p-3 bg-red-50 border border-red-200 rounded-lg text-red-800">
@@ -92,7 +99,7 @@ export default function Login({ onBackToLanding }: LoginProps) {
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 className="w-full px-4 py-3 border border-amber-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-colors"
-                placeholder={backendMode ? "Enter your username or email" : "Try: admin"}
+                placeholder="Enter your username or email"
                 required
               />
             </div>
@@ -107,7 +114,7 @@ export default function Login({ onBackToLanding }: LoginProps) {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="w-full px-4 py-3 border border-amber-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-colors"
-                placeholder={backendMode ? "Enter your password" : "Try: admin123"}
+                placeholder="Enter your password"
                 required
               />
             </div>
@@ -122,21 +129,23 @@ export default function Login({ onBackToLanding }: LoginProps) {
           </form>
 
           <div className="mt-8 pt-6 border-t border-amber-200">
-            {backendMode ? (
-              <p className="text-xs text-gray-500 text-center">
-                Connected to backend server.<br />
-                Contact your administrator for access credentials.
-              </p>
-            ) : (
-              <div className="text-xs text-gray-500 text-center">
-                <p className="mb-2">
-                  <strong>Demo Mode:</strong> Backend not connected
-                </p>
-                <p>
-                  Default credentials: <strong>admin</strong> / <strong>admin123</strong>
-                </p>
-              </div>
-            )}
+            <div className="text-xs text-gray-500 text-center">
+              {backendMode ? (
+                <div>
+                  <p className="mb-2">
+                    <strong>Backend Connected</strong>
+                  </p>
+                  <p>Default admin: <strong>admin</strong> / <strong>admin123</strong></p>
+                </div>
+              ) : (
+                <div>
+                  <p className="mb-2">
+                    <strong>Demo Mode:</strong> Backend not connected
+                  </p>
+                  <p>Demo admin: <strong>admin</strong> / <strong>admin123</strong></p>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>

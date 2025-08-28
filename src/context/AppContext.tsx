@@ -37,10 +37,6 @@ const initialState: AppState = {
   testAttempts: []
 };
 
-const initialLoading = false;
-const initialError = null;
-const initialBackendMode = false;
-
 function appReducer(state: AppState, action: AppAction): AppState {
   switch (action.type) {
     case 'SET_CURRENT_USER':
@@ -77,73 +73,54 @@ function appReducer(state: AppState, action: AppAction): AppState {
       return { ...state, testAttempts: [...state.testAttempts, action.payload] };
     case 'LOAD_STATE':
       return action.payload;
-    default:
-      return state;
-  }
-}
-
-function loadingReducer(state: boolean, action: AppAction): boolean {
-  switch (action.type) {
     case 'SET_LOADING':
-      return action.payload;
-    default:
       return state;
-  }
-}
-
-function errorReducer(state: string | null, action: AppAction): string | null {
-  switch (action.type) {
     case 'SET_ERROR':
-      return action.payload;
+      return state;
+    case 'SET_BACKEND_MODE':
+      return state;
     default:
       return state;
   }
 }
 
-function backendModeReducer(state: boolean, action: AppAction): boolean {
-  switch (action.type) {
-    case 'SET_BACKEND_MODE':
-      return action.payload;
-    default:
-      return state;
-  }
-}
 export function AppProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(appReducer, initialState);
-  const [loading, dispatchLoading] = useReducer(loadingReducer, initialLoading);
-  const [error, dispatchError] = useReducer(errorReducer, initialError);
-  const [backendMode, dispatchBackendMode] = useReducer(backendModeReducer, initialBackendMode);
+  const [loading, setLoading] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  const [backendMode, setBackendMode] = React.useState(false);
 
-  const setLoading = (loading: boolean) => {
-    dispatchLoading({ type: 'SET_LOADING', payload: loading });
-  };
-
-  const setError = (error: string | null) => {
-    dispatchError({ type: 'SET_ERROR', payload: error });
-  };
-
-  const setBackendMode = (mode: boolean) => {
-    dispatchBackendMode({ type: 'SET_BACKEND_MODE', payload: mode });
-  };
   useEffect(() => {
-    // Check backend availability and initialize
-    const initializeApp = async () => {
-      const isBackendReady = await apiService.isBackendReady();
-      setBackendMode(isBackendReady);
-      
-      if (isBackendReady) {
-        const token = localStorage.getItem('accessToken');
-        if (token) {
-          await loadInitialData();
-        }
-      } else {
-        // Load from localStorage for demo mode
-        loadFromLocalStorage();
-      }
-    };
-    
     initializeApp();
   }, []);
+
+  const initializeApp = async () => {
+    setLoading(true);
+    console.log('Initializing app...');
+    
+    // Check if backend is available
+    const isBackendReady = await apiService.checkBackendHealth();
+    setBackendMode(isBackendReady);
+    
+    if (isBackendReady) {
+      console.log('Backend is available, checking for existing session...');
+      const token = localStorage.getItem('accessToken');
+      if (token) {
+        try {
+          await loadInitialData();
+        } catch (error) {
+          console.log('Failed to load with existing token, clearing session');
+          localStorage.removeItem('accessToken');
+          localStorage.removeItem('refreshToken');
+        }
+      }
+    } else {
+      console.log('Backend not available, using localStorage mode');
+      loadFromLocalStorage();
+    }
+    
+    setLoading(false);
+  };
 
   const loadFromLocalStorage = () => {
     const savedState = localStorage.getItem('quizAppState');
@@ -160,15 +137,26 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const createDefaultAdmin = () => {
+    const defaultAdmin: User = {
+      id: 'admin-001',
+      username: 'admin',
+      email: 'admin@quiz.com',
+      password: 'admin123',
+      role: 'admin',
+      isActive: true,
+      createdAt: new Date().toISOString(),
+      loginAttempts: 0
+    };
+    dispatch({ type: 'ADD_USER', payload: defaultAdmin });
+  };
+
   const loadInitialData = async () => {
     if (!backendMode) {
       loadFromLocalStorage();
       return;
     }
 
-    setLoading(true);
-    setError(null);
-    
     try {
       // Get current user profile
       const profileData = await apiService.getProfile();
@@ -176,6 +164,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
       // Load tests
       const testsData = await apiService.getTests();
+      // Clear existing tests first
+      dispatch({ type: 'LOAD_STATE', payload: { ...state, tests: [] } });
       testsData.tests.forEach(test => {
         dispatch({ type: 'ADD_TEST', payload: test });
       });
@@ -183,33 +173,31 @@ export function AppProvider({ children }: { children: ReactNode }) {
       // Load users if admin
       if (profileData.user.role === 'admin') {
         const usersData = await apiService.getUsers();
+        // Clear existing users first
+        dispatch({ type: 'LOAD_STATE', payload: { ...state, users: [] } });
         usersData.users.forEach(user => {
           dispatch({ type: 'ADD_USER', payload: user });
         });
 
         // Load all attempts for admin
         const attemptsData = await apiService.getAllAttempts();
+        // Clear existing attempts first
+        dispatch({ type: 'LOAD_STATE', payload: { ...state, testAttempts: [] } });
         attemptsData.attempts.forEach(attempt => {
           dispatch({ type: 'ADD_TEST_ATTEMPT', payload: attempt });
         });
       } else {
         // Load user's own attempts
         const attemptsData = await apiService.getUserAttempts();
+        // Clear existing attempts first
+        dispatch({ type: 'LOAD_STATE', payload: { ...state, testAttempts: [] } });
         attemptsData.attempts.forEach(attempt => {
           dispatch({ type: 'ADD_TEST_ATTEMPT', payload: attempt });
         });
       }
     } catch (error) {
       console.error('Failed to load initial data:', error);
-      setError(error instanceof Error ? error.message : 'Failed to load data');
-      // If token is invalid, clear it
-      localStorage.removeItem('accessToken');
-      localStorage.removeItem('refreshToken');
-      // Fall back to localStorage mode
-      setBackendMode(false);
-      loadFromLocalStorage();
-    } finally {
-      setLoading(false);
+      throw error;
     }
   };
 
@@ -220,41 +208,37 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   const login = async (username: string, password: string): Promise<User | null> => {
-    if (!backendMode) {
-      return await legacyLogin(username, password);
-    }
-
-    setLoading(true);
     setError(null);
     
-    try {
-      const result = await apiService.login(username, password);
-      
-      // Store tokens
-      localStorage.setItem('accessToken', result.accessToken);
-      localStorage.setItem('refreshToken', result.refreshToken);
-      
-      // Set current user
-      dispatch({ type: 'SET_CURRENT_USER', payload: result.user });
-      
-      // Load initial data
-      await loadInitialData();
-      
-      return result.user;
-    } catch (error) {
-      console.error('Login failed:', error);
-      setError(error instanceof Error ? error.message : 'Login failed');
-      // Try localStorage fallback
-      console.log('Trying localStorage fallback...');
+    if (backendMode) {
+      try {
+        console.log('Attempting backend login...');
+        const result = await apiService.login(username, password);
+        
+        // Store tokens
+        localStorage.setItem('accessToken', result.accessToken);
+        localStorage.setItem('refreshToken', result.refreshToken);
+        
+        // Set current user
+        dispatch({ type: 'SET_CURRENT_USER', payload: result.user });
+        
+        // Load initial data
+        await loadInitialData();
+        
+        console.log('Backend login successful');
+        return result.user;
+      } catch (error) {
+        console.error('Backend login failed:', error);
+        setError(error instanceof Error ? error.message : 'Login failed');
+        return null;
+      }
+    } else {
+      // localStorage fallback
       return await legacyLogin(username, password);
-    } finally {
-      setLoading(false);
     }
   };
 
   const logout = async () => {
-    setLoading(true);
-    
     if (backendMode) {
       try {
         await apiService.logout();
@@ -266,33 +250,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // Clear state
     dispatch({ type: 'SET_CURRENT_USER', payload: null });
     dispatch({ type: 'LOAD_STATE', payload: initialState });
-    
-    setLoading(false);
-  };
-
-
-  // Save to localStorage (fallback for demo mode)
-  useEffect(() => {
-    if (!backendMode) {
-      localStorage.setItem('quizAppState', JSON.stringify(state));
-    }
-  }, [state]);
-
-  const createDefaultAdmin = () => {
-    const adminExists = state.users.some(user => user.role === 'admin');
-    if (!adminExists) {
-      const defaultAdmin: User = {
-        id: 'admin-001',
-        username: 'admin',
-        email: 'admin@quiz.com',
-        password: 'admin123',
-        role: 'admin',
-        isActive: true,
-        createdAt: new Date().toISOString(),
-        loginAttempts: 0
-      };
-      dispatch({ type: 'ADD_USER', payload: defaultAdmin });
-    }
   };
 
   // Legacy login for localStorage mode
@@ -301,13 +258,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
       u => (u.username === username || u.email === username)
     );
 
-    if (!user) return null;
+    if (!user) {
+      setError('Invalid credentials');
+      return null;
+    }
 
     if (!user.isActive) {
+      setError('Account is deactivated');
       return null;
     }
 
     if (user.loginAttempts >= 3) {
+      setError('Account is locked due to too many failed attempts');
       return null;
     }
 
@@ -328,11 +290,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
         isActive: newAttempts < 3
       };
       dispatch({ type: 'UPDATE_USER', payload: updatedUser });
+      setError('Invalid credentials');
       return null;
     }
   };
 
-
+  // Save to localStorage (fallback for demo mode)
+  useEffect(() => {
+    if (!backendMode && state.users.length > 0) {
+      localStorage.setItem('quizAppState', JSON.stringify(state));
+    }
+  }, [state, backendMode]);
 
   return (
     <AppContext.Provider value={{ 
