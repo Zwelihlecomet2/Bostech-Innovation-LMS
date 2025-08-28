@@ -10,7 +10,7 @@ interface TakeTestProps {
 }
 
 export default function TakeTest({ test, onComplete, onBack }: TakeTestProps) {
-  const { state, dispatch, refreshData } = useApp();
+  const { state, dispatch } = useApp();
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, 'A' | 'B' | 'C' | 'D'>>({});
   const [timeLeft, setTimeLeft] = useState(Math.max(0, (test.duration || 0) * 60)); // Convert minutes to seconds with validation
@@ -18,7 +18,6 @@ export default function TakeTest({ test, onComplete, onBack }: TakeTestProps) {
   const [showSubmitDialog, setShowSubmitDialog] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [hasAutoSubmitted, setHasAutoSubmitted] = useState(false);
-  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const currentQuestion = test.questions[currentQuestionIndex];
 
@@ -52,7 +51,7 @@ export default function TakeTest({ test, onComplete, onBack }: TakeTestProps) {
     );
   }
 
-  const submitTest = useCallback(async (submissionType: 'manual' | 'auto') => {
+  const submitTest = useCallback((submissionType: 'manual' | 'auto') => {
     // Prevent concurrent submissions
     if (isSubmitting) {
       return;
@@ -70,73 +69,44 @@ export default function TakeTest({ test, onComplete, onBack }: TakeTestProps) {
     }
     
     try {
-      setSubmitError(null);
-      
-      const endTime = Date.now();
-      
-      // Prepare submission data
-      const submissionData = {
-        testId: test.id,
-        answers,
-        timeSpent: Math.floor((endTime - startTime) / 1000),
-        submissionType
-      };
-      
-      // Submit to backend
-      const result = await apiService.submitTestAttempt(submissionData);
-      
-      // Add to local state for immediate UI update
-      dispatch({ type: 'ADD_TEST_ATTEMPT', payload: result.attempt });
-      
-      // Refresh data to ensure consistency
-      await refreshData();
-      
-      onComplete();
+    const endTime = Date.now();
+    const timeSpent = Math.floor((endTime - startTime) / 1000);
+    
+    let correctAnswers = 0;
+    test.questions.forEach((question) => {
+      if (answers[question.id] === question.correctAnswer) {
+        correctAnswers++;
+      }
+    });
+
+    const totalQuestions = test.questions.length;
+    const percentage = totalQuestions > 0 ? (correctAnswers / totalQuestions) * 100 : 0;
+
+    const testAttempt: TestAttempt = {
+      id: `attempt-${Date.now()}`,
+      userId: state.currentUser!.id,
+      testId: test.id,
+      answers,
+      score: correctAnswers,
+      totalQuestions,
+      correctAnswers,
+      percentage,
+      timeSpent,
+      completedAt: new Date().toISOString(),
+      submissionType
+    };
+
+    dispatch({ type: 'ADD_TEST_ATTEMPT', payload: testAttempt });
+    onComplete();
     } catch (error) {
       console.error('Error submitting test:', error);
-      setSubmitError(error instanceof Error ? error.message : 'Failed to submit test');
       setIsSubmitting(false);
       if (submissionType === 'auto') {
         setHasAutoSubmitted(false);
       }
-      
       // For auto-submission errors, we should still complete to prevent user from being stuck
       if (submissionType === 'auto') {
-        // Fallback to local storage submission
-        try {
-          const endTime = Date.now();
-          const timeSpent = Math.floor((endTime - startTime) / 1000);
-          
-          let correctAnswers = 0;
-          test.questions.forEach((question) => {
-            if (answers[question.id] === question.correctAnswer) {
-              correctAnswers++;
-            }
-          });
-
-          const totalQuestions = test.questions.length;
-          const percentage = totalQuestions > 0 ? (correctAnswers / totalQuestions) * 100 : 0;
-
-          const testAttempt: TestAttempt = {
-            id: `attempt-${Date.now()}`,
-            userId: state.currentUser!.id,
-            testId: test.id,
-            answers,
-            score: correctAnswers,
-            totalQuestions,
-            correctAnswers,
-            percentage,
-            timeSpent,
-            completedAt: new Date().toISOString(),
-            submissionType
-          };
-
-          dispatch({ type: 'ADD_TEST_ATTEMPT', payload: testAttempt });
-          onComplete();
-        } catch (fallbackError) {
-          console.error('Fallback submission also failed:', fallbackError);
-          onComplete();
-        }
+        onComplete();
       }
     }
   }, [answers, test, state.currentUser, startTime, dispatch, onComplete, isSubmitting, hasAutoSubmitted]);
@@ -333,11 +303,6 @@ export default function TakeTest({ test, onComplete, onBack }: TakeTestProps) {
       {showSubmitDialog && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
-            {submitError && (
-              <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4">
-                <p className="text-red-800 text-sm">{submitError}</p>
-              </div>
-            )}
             <h3 className="text-lg font-semibold text-gray-900 mb-4">
               Submit Test?
             </h3>
