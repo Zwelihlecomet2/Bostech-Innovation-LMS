@@ -52,7 +52,6 @@ export default function TakeTest({ test, onComplete, onBack }: TakeTestProps) {
     );
   }
 
-  const submitTest = useCallback((submissionType: 'manual' | 'auto') => {
   const submitTest = useCallback(async (submissionType: 'manual' | 'auto') => {
     // Prevent concurrent submissions
     if (isSubmitting) {
