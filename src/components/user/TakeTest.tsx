@@ -13,9 +13,11 @@ export default function TakeTest({ test, onComplete, onBack }: TakeTestProps) {
   const { state, dispatch } = useApp();
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, 'A' | 'B' | 'C' | 'D'>>({});
-  const [timeLeft, setTimeLeft] = useState(test.duration * 60); // Convert minutes to seconds
+  const [timeLeft, setTimeLeft] = useState(Math.max(0, (test.duration || 0) * 60)); // Convert minutes to seconds with validation
   const [startTime] = useState(Date.now());
   const [showSubmitDialog, setShowSubmitDialog] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [hasAutoSubmitted, setHasAutoSubmitted] = useState(false);
 
   const currentQuestion = test.questions[currentQuestionIndex];
 
@@ -50,6 +52,23 @@ export default function TakeTest({ test, onComplete, onBack }: TakeTestProps) {
   }
 
   const submitTest = useCallback((submissionType: 'manual' | 'auto') => {
+    // Prevent concurrent submissions
+    if (isSubmitting) {
+      return;
+    }
+    
+    // Prevent duplicate auto-submissions
+    if (submissionType === 'auto' && hasAutoSubmitted) {
+      return;
+    }
+    
+    setIsSubmitting(true);
+    
+    if (submissionType === 'auto') {
+      setHasAutoSubmitted(true);
+    }
+    
+    try {
     const endTime = Date.now();
     const timeSpent = Math.floor((endTime - startTime) / 1000);
     
@@ -79,27 +98,45 @@ export default function TakeTest({ test, onComplete, onBack }: TakeTestProps) {
 
     dispatch({ type: 'ADD_TEST_ATTEMPT', payload: testAttempt });
     onComplete();
-  }, [answers, test, state.currentUser, startTime, dispatch, onComplete]);
+    } catch (error) {
+      console.error('Error submitting test:', error);
+      setIsSubmitting(false);
+      if (submissionType === 'auto') {
+        setHasAutoSubmitted(false);
+      }
+      // For auto-submission errors, we should still complete to prevent user from being stuck
+      if (submissionType === 'auto') {
+        onComplete();
+      }
+    }
+  }, [answers, test, state.currentUser, startTime, dispatch, onComplete, isSubmitting, hasAutoSubmitted]);
 
   // Timer effect
   useEffect(() => {
-    if (timeLeft <= 0) {
+    // Don't start timer if already submitted or time is invalid
+    if (timeLeft <= 0 || isSubmitting || hasAutoSubmitted) {
+      if (timeLeft <= 0 && !hasAutoSubmitted && !isSubmitting) {
+        submitTest('auto');
+      }
       submitTest('auto');
       return;
     }
 
     const timer = setInterval(() => {
       setTimeLeft(prev => {
-        if (prev <= 1) {
+        const newTime = prev - 1;
+        if (newTime <= 0) {
+          // Clear interval before submitting to prevent race conditions
+          clearInterval(timer);
           submitTest('auto');
           return 0;
         }
-        return prev - 1;
+        return newTime;
       });
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [timeLeft, submitTest]);
+  }, [timeLeft, submitTest, isSubmitting, hasAutoSubmitted]);
 
   const handleAnswerSelect = (answer: 'A' | 'B' | 'C' | 'D') => {
     setAnswers(prev => ({
@@ -121,10 +158,16 @@ export default function TakeTest({ test, onComplete, onBack }: TakeTestProps) {
   };
 
   const handleSubmit = () => {
+    if (isSubmitting || hasAutoSubmitted) {
+      return;
+    }
     setShowSubmitDialog(true);
   };
 
   const confirmSubmit = () => {
+    if (isSubmitting || hasAutoSubmitted) {
+      return;
+    }
     submitTest('manual');
   };
 
@@ -226,7 +269,7 @@ export default function TakeTest({ test, onComplete, onBack }: TakeTestProps) {
         <div className="flex items-center justify-between">
           <button
             onClick={handlePrevious}
-            disabled={currentQuestionIndex === 0}
+            disabled={currentQuestionIndex === 0 || isSubmitting}
             className="flex items-center space-x-2 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             <ArrowLeft className="w-4 h-4" />
@@ -237,14 +280,16 @@ export default function TakeTest({ test, onComplete, onBack }: TakeTestProps) {
             {currentQuestionIndex === test.questions.length - 1 ? (
               <button
                 onClick={handleSubmit}
+                disabled={isSubmitting || hasAutoSubmitted}
                 className="flex items-center space-x-2 px-6 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors"
               >
                 <CheckCircle className="w-4 h-4" />
-                <span>Submit Test</span>
+                <span>{isSubmitting ? 'Submitting...' : 'Submit Test'}</span>
               </button>
             ) : (
               <button
                 onClick={handleNext}
+                disabled={isSubmitting}
                 className="flex items-center space-x-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
               >
                 <span>Next</span>
@@ -273,15 +318,17 @@ export default function TakeTest({ test, onComplete, onBack }: TakeTestProps) {
             <div className="flex space-x-3">
               <button
                 onClick={() => setShowSubmitDialog(false)}
+                disabled={isSubmitting}
                 className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
               >
                 Cancel
               </button>
               <button
                 onClick={confirmSubmit}
+                disabled={isSubmitting || hasAutoSubmitted}
                 className="flex-1 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors"
               >
-                Submit
+                {isSubmitting ? 'Submitting...' : 'Submit'}
               </button>
             </div>
           </div>
