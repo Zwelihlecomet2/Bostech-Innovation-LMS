@@ -102,32 +102,49 @@ export default function ResultsAnalytics() {
         doc.setFillColor(245, 158, 11); // Amber color
         doc.rect(0, 0, doc.internal.pageSize.width, 40, 'F');
         
-        // Add Bostech logo as base64 data URL
+        // Convert logo to base64 and add to PDF
         try {
-          // Convert image to base64 and add to PDF
-          const img = new Image();
-          img.crossOrigin = 'anonymous';
-          img.onload = function() {
-            const canvas = document.createElement('canvas');
-            const ctx = canvas.getContext('2d');
-            canvas.width = img.width;
-            canvas.height = img.height;
-            ctx?.drawImage(img, 0, 0);
-            const dataURL = canvas.toDataURL('image/jpeg', 0.8);
-            doc.addImage(dataURL, 'JPEG', 20, 5, 30, 30);
-          };
-          img.src = bostechLogo;
+          // Create a new image element and convert to base64
+          const logoImg = new Image();
+          logoImg.crossOrigin = 'anonymous';
           
-          // For immediate PDF generation, use a simpler approach
-          doc.addImage(bostechLogo, 'JPEG', 20, 5, 30, 30);
+          // Create canvas to convert image to base64
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d');
+          
+          // Load the image and convert to base64
+          logoImg.onload = () => {
+            canvas.width = logoImg.naturalWidth;
+            canvas.height = logoImg.naturalHeight;
+            ctx?.drawImage(logoImg, 0, 0);
+            
+            try {
+              const base64Data = canvas.toDataURL('image/jpeg', 0.9);
+              doc.addImage(base64Data, 'JPEG', 20, 5, 30, 30);
+            } catch (canvasError) {
+              console.warn('Canvas conversion failed:', canvasError);
+            }
+          };
+          
+          logoImg.onerror = () => {
+            console.warn('Logo image failed to load');
+          };
+          
+          // Set the source to trigger loading
+          logoImg.src = bostechLogo;
+          
+          // Wait a moment for image to load, then proceed
+          await new Promise(resolve => setTimeout(resolve, 100));
+          
         } catch (logoError) {
           console.warn('Bostech logo could not be added to PDF:', logoError);
-          // Fallback: Add a simple text logo if image fails
-          doc.setTextColor(255, 255, 255);
-          doc.setFontSize(16);
-          doc.setFont('helvetica', 'bold');
-          doc.text('BOSTECH', 20, 25);
         }
+        
+        // Fallback: Add text logo
+        doc.setTextColor(255, 255, 255);
+        doc.setFontSize(16);
+        doc.setFont('helvetica', 'bold');
+        doc.text('BOSTECH', 20, 25);
         
         // Add company name
         doc.setTextColor(255, 255, 255);
