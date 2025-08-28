@@ -13,11 +13,7 @@ export default function Login({ onBackToLanding }: LoginProps) {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   
-  const { login, createDefaultAdmin, state } = useApp();
-
-  useEffect(() => {
-    createDefaultAdmin();
-  }, [createDefaultAdmin]);
+  const { login, state } = useApp();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -25,36 +21,13 @@ export default function Login({ onBackToLanding }: LoginProps) {
     setLoading(true);
 
     try {
-      // Find user to check attempts
-      const user = state.users.find(
-        u => u.username === username || u.email === username
-      );
-
-      if (user && !user.isActive) {
-        setError('Account has been deactivated. Please contact an administrator.');
-        setLoading(false);
-        return;
-      }
-
-      if (user && user.loginAttempts >= 2) {
-        setError('Warning: This is your last attempt before account deactivation.');
-      }
-
       const loggedInUser = await login(username, password);
       if (!loggedInUser) {
-        const updatedUser = state.users.find(
-          u => u.username === username || u.email === username
-        );
-        
-        if (updatedUser && updatedUser.loginAttempts >= 3) {
-          setError('Account has been deactivated due to too many failed attempts. Please contact an administrator.');
-        } else {
-          const remainingAttempts = updatedUser ? 3 - updatedUser.loginAttempts : 3;
-          setError(`Invalid credentials. ${remainingAttempts} attempts remaining.`);
-        }
+        setError('Invalid credentials. Please check your username and password.');
       }
     } catch (err) {
-      setError('Login failed. Please try again.');
+      const errorMessage = err instanceof Error ? err.message : 'Login failed. Please try again.';
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
