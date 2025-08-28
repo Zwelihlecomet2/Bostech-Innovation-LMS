@@ -112,17 +112,17 @@ export default function TestResults({ onBack }: TestResultsProps) {
   };
 
   const getGradeColor = (percentage: number) => {
-    if (percentage >= 75) return 'text-green-600';
-    if (percentage >= 50) return 'text-yellow-600';
+    if (percentage >= 80) return 'text-green-600';
+    if (percentage >= 60) return 'text-yellow-600';
     return 'text-red-600';
   };
 
   const getGradeLabel = (percentage: number) => {
-    if (percentage >= 90) return 'Pass - Excellent';
-    if (percentage >= 75) return 'Pass - Very Good';
-    if (percentage >= 60) return 'Pass - Good';
-    if (percentage >= 50) return 'Satisfactory';
-    return 'Fail - Needs Improvement';
+    if (percentage >= 90) return 'Excellent';
+    if (percentage >= 80) return 'Very Good';
+    if (percentage >= 70) return 'Good';
+    if (percentage >= 60) return 'Satisfactory';
+    return 'Needs Improvement';
   };
 
   const getRemainingAttempts = (testId: string) => {
